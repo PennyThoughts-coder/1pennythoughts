@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>1PennyThoughts — Demo</title>
+  <style>
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#0f172a;background:#f8fafc}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .head{position:sticky;top:0;background:rgba(255,255,255,.75);backdrop-filter:blur(6px);border-bottom:1px solid #e2e8f0;padding:12px 0;display:flex;align-items:center;justify-content:space-between}
+    .brand{font-weight:800}.wallet{font-size:14px;color:#475569;display:flex;gap:16px}
+    .main{display:grid;grid-template-columns:1fr;gap:20px;margin-top:16px}
+    @media (min-width:980px){.main{grid-template-columns:2fr 1fr}}
+    .card{background:#fff;border-radius:14px;box-shadow:0 6px 24px rgba(2,6,23,.06);padding:16px;margin-bottom:12px}
+    h1,h2,h3,h4{margin:0}.muted{color:#64748b}.small{font-size:13px}
+    .row{display:flex;gap:10px;align-items:center}
+    .row-between{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+    .badges{display:flex;gap:8px;align-items:center}
+    .badge{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:2px 8px;font-size:12px}
+    .body{margin:8px 0 10px}
+    input,textarea{width:100%;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:14px}
+    textarea{min-height:90px}
+    button{border:1px solid #CBD5E1;background:#111827;color:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;font-size:14px}
+    button[disabled]{background:#94a3b8;cursor:not-allowed}
+    button:not([disabled]):hover{filter:brightness(1.06)}
+    .divider{border-top:1px solid #e2e8f0;margin:12px 0}
+    .foot{margin:24px 0 40px;font-size:12px;color:#64748b}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="head">
+      <div class="brand">1PennyThoughts (Demo)</div>
+      <div class="wallet">
+        <div>Your Wallet: <b id="wallet-you">$0.00</b></div>
+        <div>Platform: <b id="wallet-platform">$0.00</b></div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="left">
+        <div class="card">
+          <h2>Start a new topic <span class="muted">(2¢)</span></h2>
+          <input id="new-title" placeholder="Title"/>
+          <textarea id="new-body" placeholder="What's your thought?"></textarea>
+          <button id="btn-post">Post for 2¢</button>
+          <p class="muted small" id="post-error"></p>
+        </div>
+        <div id="posts"></div>
+      </section>
+
+      <aside class="right">
+        <div class="card">
+          <h3>Today’s Stats</h3>
+          <ul class="small">
+            <li>Total likes: <b id="stat-likes">0</b></li>
+            <li>Total comments: <b id="stat-comments">0</b></li>
+            <li>Author payouts: <b id="stat-payout">0</b>¢</li>
+            <li>Platform earnings: <b id="stat-platform">0</b>¢</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>How it works</h3>
+          <ol class="small">
+            <li>Posting a topic costs 2¢ (goes to the platform).</li>
+            <li>Each like costs 2¢ (split: 1¢ to author, 1¢ to platform).</li>
+            <li>Each comment costs 2¢ (split: 1¢ to platform, 1¢ to author).</li>
+            <li>Track balances in the wallet header.</li>
+          </ol>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="foot">Demo only. No real payments.</footer>
+  </div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const $$ = s => document.querySelectorAll(s);
+    const USERS = { you:{id:"you",name:"You"}, gordon:{id:"gordon",name:"Gordon"}, alex:{id:"alex",name:"Alex"} };
+
+    const state = {
+      wallets: { you: 500, platform: 0, gordon: 0, alex: 0 }, // cents
+      posts: [
+        { id:"p1", authorId:"gordon", title:"Should posting on forums cost money?", body:"A tiny fee might reduce spam and reward quality. Would you pay 2¢ to start a topic?", likes:2, earned:2, comments:[{id:"c1", authorId:"alex", body:"Yes—micro-costs create accountability."}] },
+        { id:"p2", authorId:"alex", title:"AI vs Human Creativity", body:"AI can remix; humans originate context. The best work is a collaboration.", likes:0, earned:0, comments:[] }
+      ]
+    };
+
+    function fmt(c){ return "$" + (c/100).toFixed(2); }
+    function canAfford(user, cost){ return (state.wallets[user]||0) >= cost; }
+    function spend(user, cost){ state.wallets[user] -= cost; }
+    function pay(user, amt){ state.wallets[user] = (state.wallets[user]||0) + amt; }
+    function escapeHtml(s){ return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"); }
+
+    function renderWallet(){
+      $("#wallet-you").textContent = fmt(state.wallets.you);
+      $("#wallet-platform").textContent = fmt(state.wallets.platform);
+      $("#stat-platform").textContent = state.wallets.platform;
+    }
+
+    function statsFromPosts(){
+      let likes=0, comments=0, payout=0;
+      state.posts.forEach(p => { likes += p.likes; comments += p.comments.length; payout += p.earned; });
+      $("#stat-likes").textContent = likes;
+      $("#stat-comments").textContent = comments;
+      $("#stat-payout").textContent = payout;
+    }
+
+    function postCard(p){
+      const div = document.createElement("article");
+      div.className = "card";
+      div.innerHTML = `
+        <div class="row-between">
+          <div>
+            <h3>${escapeHtml(p.title)}</h3>
+            <p class="muted small">by ${escapeHtml(USERS[p.authorId]?.name||"user")} • Earned ${p.earned}¢</p>
+          </div>
+          <div class="badges">
+            <span class="badge">${p.likes} likes</span>
+            <span class="badge">${p.comments.length} comments</span>
+          </div>
+        </div>
+        <p class="body">${escapeHtml(p.body)}</p>
+        <div class="row">
+          <button class="btn-like" data-id="${p.id}">Like (2¢)</button>
+          <button disabled>Promote (demo)</button>
+        </div>
+        <div class="divider"></div>
+        <div class="comments">
+          ${p.comments.map(c=>`<p class="small"><b>${escapeHtml(USERS[c.authorId]?.name||"user")}:</b> ${escapeHtml(c.body)}</p>`).join("")}
+        </div>
+        <div class="row">
+          <input class="comment-input" data-id="${p.id}" placeholder="Write a comment (2¢)"/>
+          <button class="btn-comment" data-id="${p.id}">Send 2¢</button>
+        </div>
+      `;
+      return div;
+    }
+
+    function renderPosts(){
+      const wrap = $("#posts");
+      wrap.innerHTML = "";
+      state.posts.forEach(p => wrap.appendChild(postCard(p)));
+
+      $$(".btn-like").forEach(b => b.addEventListener("click", () => {
+        const id = b.dataset.id;
+        const post = state.posts.find(x => x.id === id);
+        if(!post) return;
+
+        const cost = 2;
+        if(!canAfford("you", cost)){ alert("Need 2¢ to like"); return; }
+        spend("you", cost);
+        pay(post.authorId, 1);
+        pay("platform", 1);
+        post.likes += 1;
+        post.earned += 1;
+        renderWallet(); statsFromPosts(); renderPosts();
+      }));
+
+      $$(".btn-comment").forEach(b => b.addEventListener("click", () => {
+        const id = b.dataset.id;
+        const post = state.posts.find(x => x.id === id);
+        const input = document.querySelector(`.comment-input[data-id="${id}"]`);
+        const text = (input.value||"").trim();
+        if(!text) return;
+
+        const cost = 2;
+        if(!canAfford("you", cost)){ alert("Need 2¢ to comment"); return; }
+        spend("you", cost);
+        pay("platform", 1);
+        pay(post.authorId, 1);
+        post.earned += 1;
+        post.comments.push({ id: "c"+Date.now(), authorId: "you", body: text });
+        input.value = "";
+        renderWallet(); statsFromPosts(); renderPosts();
+      }));
+    }
+
+    function main(){
+      $("#btn-post").addEventListener("click", () => {
+        $("#post-error").textContent = "";
+        const title = $("#new-title").value.trim();
+        const body  = $("#new-body").value.trim();
+        const cost = 2;
+        if(!canAfford("you", cost)){ $("#post-error").textContent = "Insufficient funds (need 2¢)."; return; }
+        spend("you", cost); pay("platform", cost);
+        state.posts.unshift({ id:"p"+Date.now(), authorId:"you", title, body, likes:0, earned:0, comments:[] });
+        $("#new-title").value = ""; $("#new-body").value = "";
+        renderWallet(); statsFromPosts(); renderPosts();
+      });
+
+      renderWallet(); statsFromPosts(); renderPosts();
+    }
+    main();
+  </script>
+</body>
+</html>
